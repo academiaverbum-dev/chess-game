@@ -1,0 +1,24 @@
+Stockfish.js 17.1.0 — versão lite-single (uma thread)
+Copyright (c) 2025 Chess.com, LLC; Nathan Rugg e demais colaboradores.
+Baseado no Stockfish de T. Romstad, M. Costalba, J. Kiiski, G. Linscott
+ e demais colaboradores. Rede por Linmiao Xu (linrock).
+
+Este motor é software livre, distribuído sob a GNU GPL versão 3,
+sem garantia. Você pode usar, estudar, modificar e redistribuir o motor
+sob os termos desta licença. Consulte COPYING.txt e AUTHORS.txt nesta pasta.
+
+Arquivos originais do pacote npm stockfish@17.1.0:
+ stockfish-17.1-lite-single-03e3232.js -> stockfish.js
+ stockfish-17.1-lite-single-03e3232.wasm -> stockfish.wasm
+Nenhuma modificação no conteúdo dos arquivos do motor foi realizada.
+
+Código-fonte correspondente e instruções de compilação, disponíveis
+publicamente sem custo no repositório do fornecedor (commit gitHead do pacote):
+https://github.com/nmrugg/stockfish.js/tree/602fd7e1a571a2be71f242942db90483731f2a1f
+Download do código-fonte dessa revisão:
+https://github.com/nmrugg/stockfish.js/archive/602fd7e1a571a2be71f242942db90483731f2a1f.tar.gz
+Consulte README.md, build.js, src/ e os scripts dessa revisão para reconstruir
+o motor com Emscripten e obter as redes de avaliação correspondentes.
+
+Projeto oficial: https://github.com/official-stockfish/Stockfish
+Pacote: https://www.npmjs.com/package/stockfish/v/17.1.0
