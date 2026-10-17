@@ -1,13 +1,74 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Chess, type Square, type PieceSymbol } from "chess.js";
 import { names, play, status } from "./game";
+import { type Difficulty, undoTurn } from "./ai";
+import { computerMove } from "./computer";
 const symbols = {
   w: { k: "♚", q: "♛", r: "♜", b: "♝", n: "♞", p: "♟" },
   b: { k: "♚", q: "♛", r: "♜", b: "♝", n: "♞", p: "♟" },
 };
 export default function App({ initialFen }: { initialFen?: string }) {
   const [game] = useState(() => new Chess(initialFen));
-  const [, render] = useState(0);
+  const [revision, render] = useState(0);
+  const [mode, setMode] = useState("local");
+  const [difficulty, setDifficulty] = useState<Difficulty>("easy");
+  const [thinking, setThinking] = useState(false);
+  const [engineError, setEngineError] = useState("");
+  const computerTurn =
+    mode === "computer" && game.turn() === "b" && !game.isGameOver();
+  useEffect(() => {
+    if (mode !== "computer" || game.turn() !== "b" || game.isGameOver()) return;
+    const controller = new AbortController();
+    setThinking(true);
+    setEngineError("");
+    const fen = game.fen();
+    // O atraso curto deixa a atualização do tabuleiro aparecer antes do cálculo.
+    const timer = setTimeout(() => {
+      computerMove(fen, difficulty, controller.signal)
+        .then((move) => {
+          if (controller.signal.aborted || game.fen() !== fen) return;
+          if (
+            !play(
+              game,
+              move.slice(0, 2) as Square,
+              move.slice(2, 4) as Square,
+              move[4],
+            )
+          ) {
+            throw new Error("O motor retornou um movimento ilegal.");
+          }
+          setThinking(false);
+          refresh();
+        })
+        .catch((error) => {
+          if (controller.signal.aborted) return;
+          setThinking(false);
+          setEngineError(
+            error instanceof Error
+              ? error.message
+              : "Falha ao calcular o lance.",
+          );
+        });
+    }, 250);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+      setThinking(false);
+    };
+  }, [game, mode, difficulty, revision]);
+  function changeSettings(nextMode: string, nextDifficulty: Difficulty) {
+    if (
+      game.history().length &&
+      !window.confirm(
+        "Alterar a configuração iniciará uma nova partida. Continuar?",
+      )
+    )
+      return;
+    game.reset();
+    setMode(nextMode);
+    setDifficulty(nextDifficulty);
+    refresh();
+  }
   const [selected, select] = useState<Square | null>(null);
   const [promotion, promote] = useState<{ from: Square; to: Square } | null>(
     null,
@@ -20,13 +81,14 @@ export default function App({ initialFen }: { initialFen?: string }) {
   const files = (flipped ? "hgfedcba" : "abcdefgh").split("");
   const ranks = flipped ? [1, 2, 3, 4, 5, 6, 7, 8] : [8, 7, 6, 5, 4, 3, 2, 1];
   function refresh() {
+    setEngineError("");
     select(null);
     promote(null);
     setMessage("");
     render((n) => n + 1);
   }
   function click(square: Square) {
-    if (game.isGameOver() || promotion) return;
+    if (game.isGameOver() || promotion || computerTurn) return;
     if (selected === square) {
       select(null);
       return;
@@ -61,7 +123,9 @@ export default function App({ initialFen }: { initialFen?: string }) {
         <strong>Peças {color === "w" ? "brancas" : "pretas"}</strong>
         <small>
           {game.turn() === color && !game.isGameOver()
-            ? "Sua vez de jogar"
+            ? mode === "computer" && color === "b"
+              ? "Computador"
+              : "Sua vez de jogar"
             : "Jogador " + (color === "w" ? "1" : "2")}
         </small>
       </div>
@@ -76,7 +140,8 @@ export default function App({ initialFen }: { initialFen?: string }) {
         </a>
         <span className="header-note">O próximo lance é seu.</span>
         <span className="local-badge">
-          <i /> Dois jogadores · Local
+          <i />{" "}
+          {mode === "local" ? "Dois jogadores · Local" : "Contra o computador"}
         </span>
       </header>
       <main>
@@ -110,7 +175,7 @@ export default function App({ initialFen }: { initialFen?: string }) {
                         aria-label={`${square}${piece ? `, ${names[piece.type]} ${piece.color === "w" ? "branco" : "preto"}` : ""}${target ? ", movimento legal" : ""}`}
                         aria-pressed={selected === square}
                         onClick={() => click(square)}
-                        disabled={!!promotion}
+                        disabled={!!promotion || computerTurn}
                         className={`square ${(ri + ci) % 2 ? "dark" : "light"} ${selected === square ? "selected" : ""} ${last && (last.from === square || last.to === square) ? "last" : ""} ${check ? "check" : ""}`}
                       >
                         {ci === 0 && <span className="rank">{rank}</span>}
@@ -143,6 +208,36 @@ export default function App({ initialFen }: { initialFen?: string }) {
           <aside>
             <section className="panel status-panel">
               <p className="eyebrow">A PARTIDA</p>
+              <div className="game-settings">
+                <label htmlFor="game-mode">Modo de jogo</label>
+                <select
+                  id="game-mode"
+                  value={mode}
+                  onChange={(event) =>
+                    changeSettings(event.target.value, difficulty)
+                  }
+                >
+                  <option value="local">Dois jogadores</option>
+                  <option value="computer">Contra o computador</option>
+                </select>
+                {mode === "computer" && (
+                  <>
+                    <label htmlFor="difficulty">Dificuldade</label>
+                    <select
+                      id="difficulty"
+                      value={difficulty}
+                      onChange={(event) =>
+                        changeSettings(mode, event.target.value as Difficulty)
+                      }
+                    >
+                      <option value="easy">Fácil</option>
+                      <option value="medium">Médio</option>
+                      <option value="hard">Difícil · Stockfish</option>
+                    </select>
+                    <small>Você joga com as brancas.</small>
+                  </>
+                )}
+              </div>
               <div className="status-title">
                 <span className={`turn-disc ${game.turn()}`} />
                 <h2>
@@ -152,8 +247,23 @@ export default function App({ initialFen }: { initialFen?: string }) {
                 </h2>
               </div>
               <p role="status" aria-live="polite">
-                {status(game)}
+                {thinking ? "O computador está pensando…" : status(game)}
               </p>
+              {engineError && (
+                <div className="engine-error" role="alert">
+                  <p>{engineError}</p>
+                  <p>
+                    Você pode tentar novamente ou mudar a dificuldade para
+                    começar outra partida.
+                  </p>
+                  <button
+                    className="secondary"
+                    onClick={() => render((n) => n + 1)}
+                  >
+                    Tentar novamente
+                  </button>
+                </div>
+              )}
               <div className="instruction">
                 {selected
                   ? `Peça selecionada: ${selected}. Clique em uma casa destacada.`
@@ -185,7 +295,7 @@ export default function App({ initialFen }: { initialFen?: string }) {
                   className="secondary"
                   disabled={!history.length || !!promotion}
                   onClick={() => {
-                    game.undo();
+                    undoTurn(game, mode === "computer");
                     refresh();
                   }}
                 >
@@ -229,8 +339,9 @@ export default function App({ initialFen }: { initialFen?: string }) {
               <div>
                 <strong>Sem pressa. Pense no próximo lance.</strong>
                 <p>
-                  As brancas começam. Revezem os turnos no mesmo dispositivo e
-                  aproveitem a partida.
+                  {mode === "local"
+                    ? "As brancas começam. Revezem os turnos no mesmo dispositivo e aproveitem a partida."
+                    : "Você controla as brancas. O computador responde com as pretas, inteiramente no navegador."}
                 </p>
               </div>
             </section>
@@ -241,7 +352,12 @@ export default function App({ initialFen }: { initialFen?: string }) {
         <span>
           casa64 <span>·</span> Feito para quem gosta de pensar.
         </span>
-        <span>Regras oficiais · Sem adversário virtual</span>
+        <span>
+          casa64 v0.2 ·{" "}
+          <a href={`${import.meta.env.BASE_URL}engine/NOTICE.txt`}>
+            Stockfish · GPLv3
+          </a>
+        </span>
       </footer>
       {promotion && (
         <div className="overlay">

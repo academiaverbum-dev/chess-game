@@ -30,6 +30,8 @@ jobs:
         run: npm ci
       - name: Executar testes
         run: npm test
+      - name: Verificar Stockfish WASM real
+        run: npm run test:engine
       - name: Compilar aplicação
         run: npm run build
       - name: Preparar artefato do Pages
